@@ -576,7 +576,7 @@ ggmap(lisbon_map)
 
 #how to set up an API key (you need to link a credit card)
 # https://www.findingyourway.io/blog/2018/12/05/2018-12-05-using-ggmap-after-july-2018/
-api_secret <- 'AIzaSyAZMk84DD46I0EMsHm0ZzSD8ATpZPQWKBo' #PLEASE DO NOT USE MY API KEY, MAKE YOUR OWN!
+api_secret <- 'NICE TRY' #PLEASE DO NOT USE MY API KEY, MAKE YOUR OWN!
 #sounds scary but its pretty much impossible for us to reach the limit where we would be charged, each time you run get_googlemap you are charged 0.002 USD and google gives you $200 a month, so 1000 maps are $2
 register_google(key = api_secret)
 
