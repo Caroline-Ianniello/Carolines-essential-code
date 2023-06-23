@@ -1,0 +1,603 @@
+---
+title: "Essential R Code Notebook"
+author: Caroline Fleming
+output: html_notebook
+editor_options: 
+  chunk_output_type: inline
+---
+# Welcome to Caroline's Essential R Code Notebook! These are in no particular order, just the code I find I use most and is most useful. Obviously, these are taken from different r projects and no data is provided, so you will have to play around with the variables and/or datasets that are comparable to what I have generated. But this should at least be a good place to start. In the event that a function does not work, google "what package is x function in"? And you may have to install and then library that package.
+```{r common packages that you will probably want}
+library("lme4")
+#install.packages("lmerTest")
+library("lmerTest")
+#install.packages("emmeans")
+library("emmeans")
+#install.packages("pbkrtest")
+library("pbkrtest")
+#reshape melts our datasets in the way we want
+library("reshape2")
+library("dplyr")
+library("plyr")
+library("tidyverse")
+library("Rmisc")
+library("ggplot2")
+library("performance")
+library("see")
+library("ggrepel")
+
+#increase the number of results it will show
+options(max.print=1000000)
+```
+
+```{r Establishing your working directory and uploading data}
+#Establish working directory
+require("knitr")
+opts_knit$set(root.dir = "C:/Users/carol/Downloads") #I find that when doing R markdowns (which is what I use the most) using knitr to define my working directory works best
+getwd() #this will tell you what your current working directory is
+
+#Upload your data
+total_data <- read.csv("C:/Users/carol/Downloads/THESIS_DATA_INITALFINAL.csv", header = TRUE) #this is how you add data. Header=TRUE tells R that there is a header column with data labels.
+```
+
+```{r GIT}
+#if you have a git file already on your computer and want to put everything into a repository, do the following in the TERMINAL:
+# move to the project directory
+cd Projects/website
+
+# initiate the upstream tracking of the project on the GitHub repo
+git remote add origin https://github.com/hansenjohnson/website.git
+
+# pull all files from the GitHub repo (typically just readme, license, gitignore)
+git pull origin master #often you can just skip this
+
+# set up GitHub repo to track changes on local machine
+git push -u origin master
+
+#now eveything should be connected and you can use the R studio git tab as normal
+```
+
+```{r Testing for normality and package to suggest transformation}
+# In order to do a lot of statistical tests, you want your data to be normal. You can test this visually by looking at Q-Q plots and histograms. You should do this for each of your dependent variables.
+#Histogram
+hist(total_data$WEIGHT_M0) #You want this to look like a normal distribution bell curve
+#Q-Q plot
+qqnorm(total_data$WEIGHT_M0)#you want the points to follow the line pretty cleanly
+
+#You can also test if your data is normal using a Shapiro test
+shapiro.test(resp_all.data$resp_rate) 
+
+
+#The below chunk of code takes a column of your data, checks to see if it is normal, and if it is not normal it suggests a certain transformation it thinks will make the data normal, you need the package bestNormalize
+#install new package to see what the best transformation is
+#install.packages("bestNormalize")
+library("bestNormalize")
+bestNormalize(resp_all_nitrate.data$resp_rate)
+#in order for this to work I need to change the PAM_delta in to a vector
+resp_all_nitrate.data$resp_rate_vector<-as.vector(resp_all_nitrate.data$resp_rate_vector)
+#then I run the orderNorm command into a new object
+orderNormobj_resp_rate<-orderNorm(resp_all_nitrate.data$resp_rate)
+#this object gives us what we want, but we have to index from that object and put it in a new column
+resp_all_nitrate.data$ordernorm_resp_rate<-orderNormobj_resp_rate$x.t
+
+#Let say that you want to add another column with the transformed data
+#adding a log transformed resp rate
+resp_all_nitrate.data$log_resp_rate<-log(abs(resp_all_nitrate.data$resp_rate))
+```
+
+```{r Checking if there are outliers in the dataset}
+#If you think there might be a statistical outlier in your dataset, you can do a grubbs test, which will tell you if there is an outlier and the value of that outlier
+#This function is in the outliers package
+#install.packages("outliers")
+#library(outliers)
+grubbs.test(resp_all_nitrate.data$resp_rate) 
+```
+
+```{r changing column names and removing them }
+#changing some column names
+pam_all.data<-subset(pam_all.data, select = -c(temp))
+#renaming columns in base R because dplyr is freaking out
+colnames(pam_all.data)[colnames(pam_all.data) == "sym_state"] ="sym_state_full"
+colnames(pam_all.data)[colnames(pam_all.data) == "sym_state.1"] ="sym_state"
+colnames(pam_all.data)[colnames(pam_all.data) == "temp.1"] ="temp"
+```
+
+```{r Subsetting OR selecting}
+all_20C<-subset(resp_all_nitrate.data, resp_all_nitrate.data$temp==20)
+
+#in subsetting the &, aka "and" is an additive function, and |, aka "or" takes anything that has either criteria
+
+#selecting data by row (a condition within  a column)
+env_chamber_HOBO_exp_2<- env_chamber_HOBO[env_chamber_HOBO$date  %in% c("8/4/2022", "8/5/2022", "8/6/2022", "8/7/2022"),] #the comma is important at the end here, tells R that we are looking at ROWs not entire columns
+
+```
+
+```{r T tests parametric and nonparametric}
+#When your data follows a normal distribution
+t.test(data$PAM , data$N_species_dose, paired=TRUE) #can have paired=TRUE or paired=FALSE depending on your data
+
+#Use this Wilcoxon test when the data does not follow a normal distribution -- worth noting that Ethan Deyle really likes these tests!
+wilcox.test(data$PAM , data$N_species_dose, paired=TRUE) #can have paired=TRUE or paired=FALSE depending on your data
+```
+
+```{r ANOVA and Tukey Posthocs}
+#Do an ANOVA when you have multiple independent variables that you think explain your dependent variable
+aov_resp_e_coli <- aov(resp_rate ~ temp + food, data=e_coli)
+summary(aov_resp_e_coli) # you have to include this summary function here to actually look at the results of the ANOVA
+#Now you will likely want to do a Tukey's pairwise posthoc
+TukeyHSD(aov_resp_e_coli, "temp") #this tells you that you want to see pairwise comparisons of temperature
+```
+
+
+```{r Generating linear models for NORMALLY DISTRIBUTED DATA}
+#When you have a complicated dataset and you want to see how various different independent variables effect your dependent variable and the magnitude of that effect, you usually want to create a linear model. This is essentially the same math as an ANOVA (from what Caroline understands, but she's no stats buff), but is really the gold standard for investigating the effects of your variables on your output.
+
+#When generating a linear model, you first have to decide whether or not you want to include random effects. In a simple linear model using the function lm(), you are essentially doing an ANOVA. Often, though, we have random effects such as the tank or jar the organism was in, the colony the coral came from, or something else that we want to control for so that any variation caused by that random effect is put to the side and we can see what actually infludenced the data. When you have a random effect in your data, you want a linear model with random effects, which uses the lmer() function from the lme4 package.
+
+#The lm() and lmer() functions work similarly, though in their syntax -- first you have your dependent variable, then a tilde (~), then your independent variables added to gether using a + sign, then a data= at the end. In the lmer() function, you include a random effect which for some weird reason needs to look like this,"(1|col_num)". Here is the same model, with and without a random effect:
+
+simple_model <- lm(resp_rate ~ e_coli_plate + temperature, data=resp_all.data)
+
+random_effects_model <- lmer(resp_rate ~ e_coli_plate + temperature + (1|tank_number), data=resp_all.data) #adding this random effect of tank number will allow me to investigate whether the data was influenced by the tank the corals were in
+  
+# !!!!!!  
+# It is really important to know that in order to look at the results of your model, you need to use the summary() function around the object that you named the model.
+summary(simple_model)
+summary(random_effects_model)
+
+
+#Here's how to interpret the output (YIIIIKES, this is tricky, but stick with me)
+#Example model:
+resp_random_model <- lmer(resp_rate ~ N_species_dose + food +(1|vial_ID), data=resp_all_nitrate.data)
+summary(resp_random_model)
+
+#Example output as it would appear in your console:
+# Linear mixed model fit by REML. t-tests use Satterthwaite's method ['lmerModLmerTest']
+# Formula: resp_rate ~ N_species_dose + food + (1 | vial_ID)
+#    Data: resp_all_nitrate.data
+# 
+# REML criterion at convergence: -3314.1
+# 
+# Scaled residuals: 
+#      Min       1Q   Median       3Q      Max 
+# -2.98495 -0.55448  0.09901  0.74610  2.13819 
+# 
+# Random effects:
+#  Groups   Name        Variance    Std.Dev.
+#  vial_ID  (Intercept) 0.000000000 0.000000
+#  Residual             0.000002937 0.001714
+# Number of obs: 342, groups:  vial_ID, 22
+# 
+# Fixed effects:
+#                         Estimate   Std. Error           df t value            Pr(>|t|)    
+# (Intercept)          -0.00426781   0.00019997 337.00000000 -21.342 <0.0000000000000002 ***
+# N_species_doseN_1.5   0.00036093   0.00025201 337.00000000   1.432               0.153    
+# N_species_doseN_5    -0.00001925   0.00025797 337.00000000  -0.075               0.941    
+# N_species_doseN_18   -0.00033715   0.00026798 337.00000000  -1.258               0.209    
+# foodS                -0.00007661   0.00018536 337.00000000  -0.413               0.680    
+# ---
+# Signif. codes:  0 ‘***’ 0.001 ‘**’ 0.01 ‘*’ 0.05 ‘.’ 0.1 ‘ ’ 1
+# 
+# Correlation of Fixed Effects:
+#             (Intr) N__N_1. N__N_5 N__N_18
+# N_spc_N_1.5 -0.629                       
+# N_spcs_dN_5 -0.610  0.486                
+# N_spcs_N_18 -0.590  0.468   0.457        
+# foodS       -0.458  0.004  -0.004  0.001 
+# optimizer (nloptwrap) convergence code: 0 (OK)
+
+
+
+#What the heck does any of this mean?! Well really you want to focus on the Fixed effects table, specifically the Pr(>|t|) and the Estimate.
+
+#The take-home that I get from this model is that either N_species_dose or food explain much about the model, because the p values for those are not significant (they are greater than 0.05).
+
+#Honestly, when I am looking at these tables I am much more interested in pairwise comparisons between different independent variables (which we will get to in a section or two) then the effects on the whole model. But essentially this table tells you what independent variables are influencing changes in the dependent variable, and to what extent (estimate).
+
+#The intercept is a really confusing concept that I still havent even fully understood, but what I do know is that 1) we don't really care about the intercept and 2) whatever independent variable you see missing is looped into that intercept. For example, in this dataset we had to different types of food regimes, fed (F) or starved (S). In the Fixed Effects table, I see foodS but not foodF. That is because foodF is a part of the intercept, and so the model is comparing the effect of foodF (which we cannot see because it is magically inside the intercept) to foodS which we can see, and the p value for that comparison is 0.68 (not significant). Also, I dont see our control dosage of 0 for N_species_dose in the fixed effects table. That means it's wrapped up in the intercept.
+
+#Effect size can be interesting to look into, but it's more helpful to look into when there are more straight forward pairwise interactions in our posthocs (more on that in a bit)
+
+# NOTE: there is code that can give you a nice plot of linear model including residuals and standard error:
+termplot(lm_mod, partial.resid=TRUE, se=TRUE)
+```
+
+
+```{r Linear model selection for normally distributed data}
+# STEPWISE LINEAR MODEL SELECTION
+# We want to do linear model selection because we want to see what independent variables actually explain changes in dependent variables, and we don't care so much about something that is not explaining our data.  By this, I mean interesting comes out as significant in the overall model, and not interesting is not significant in the overall model. There is actually a cool set of mathematical functions that can actually pull out what is interesting and take away what is not.
+
+
+#Let's complete a linear model selection for simple linear models with NO random effects. We have to include every possible factor and the combined effects of every factor, the * indicates that those effects have been combined
+
+#stepAIC is from the MASS package
+fullModel = lm(resp_rate ~   N_species_dose + temp + food + sym_state + e_coli_plate + N_species_dose*temp + N_species_dose*food + N_species_dose*sym_state + N_species_dose*e_coli_plate + temp*food + temp*sym_state + temp*e_coli_plate + food*sym_state + food*e_coli_plate + sym_state*e_coli_plate, data= resp_all_nitrate.data) # model with all 9 variables and possible combinations
+
+nullModel = lm(resp_rate ~  1, data= resp_all_nitrate.data) # model with the intercept only
+
+summary(stepAIC(nullModel, # start with a model containing no variables
+                direction = 'forward', # run forward selection
+                scope = list(upper = fullModel, # the maximum to consider is a model with all variables
+                             lower = nullModel), # the minimum to consider is a model with no variables
+                trace = 1)) # do not show the step-by-step process of model selection
+
+#LINEAR MODEL WITH RANDOM EFFECTS
+#Now let's do a linear model selection on a linear model with random effects (that was generated using the lmer function from lme4 package)
+# This stepwise function includes random effects
+full.model <- lmer(resp_rate ~  N_species_dose + temp + food + sym_state + e_coli_plate + N_species_dose*temp + N_species_dose*food + N_species_dose*sym_state + N_species_dose*e_coli_plate + temp*food + temp*sym_state + temp*e_coli_plate + food*sym_state + food*e_coli_plate + sym_state*e_coli_plate +  (1|col_num) + (1|exp_num) , data= resp_all_nitrate.data)
+print(step.model<- step(full.model))
+
+
+#If you want to do this yourself or compare specific models to each other, you want to use an AIC score, which is Aike's Information Criterion, named after some white dude I'm sure. the lower the AIC score, the better or more "fitted" your model is.
+#AICing for model selection
+AIC(mm_resp_2, mm_resp_3) #A lower AIC indicates a model that explains more of the data, AKA, LOWER AIC= good!
+#Generating an AIC table if you want to compare a bunch at once
+AIC_table_resp<-AIC(mm_resp_1, mm_resp_2, mm_resp_3, mm_resp_3_a, mm_resp_4, mm_resp_5, mm_resp_6)
+AIC_table_resp
+
+```
+
+```{r Checking for model fitness and visualizing model}
+#After we generate our "winning" model with the lowest AIC score, we also need to do some checks that our model isn't breaking some serious rules, most of which I dont understand but I follow blindly lol
+
+#Here's an example of me doing that:
+#  CHECKING MODEL FITNESS AND VISUALIZING MODEL for our winning model mm_resp_2
+#checking for model fit
+plot(mm_resp_2) #homogeneity of variance,looks okay--we want them to be relatively distributed around 0
+r2(mm_resp_2) #r2 tells us how much variance in our data is explained by our model. Marginal id variance is the amount of variance explaiend just by fixed factors (independent variables), and conditional includes variance explained by random factor. You can interpret these as percentages.
+check_collinearity(mm_resp_2) #check for predictor variables are correlated #Low correllation
+check_outliers(mm_resp_2) #If there is an outlier, you need to take care of this-- see a chunk of code above
+
+check_heteroscedasticity(mm_resp_2) #heteroscadasticity detected
+check_homogeneity(mm_resp_2) #all good, there is homogeneity
+check_autocorrelation(mm_resp_2) #autocorrelation detected
+#Now this command will plot all of our model diagnostics to visualize them
+plot_model(mm_resp_2, type="diag") #everything looks pretty good
+
+#checking out the contribution of each variable to the mode
+summary(mm_resp_2)$coef
+#we can just interpret t as an index of how important the effect is without trying to use some p-value to describe it
+
+#looking at just the random effect part of the model
+VarCorr(mm_resp_2) #not really sure how to interpret this
+
+plot_model(mm_resp_2, "eff") # plots the predicted effects of each variable on respiration rate 
+plot_model(mm_resp_2, type="re") # plots random effects 
+
+#let's try using the package relaimpo to give us a sense of the relative contribution of each variable to the model
+# link for info on this package: https://advstats.psychstat.org/book/mregression/importance.php
+library(relaimpo)
+lm_resp_2_relimp <- lm(resp_rate ~ factor(sym_state) + factor(temp) + 
+    factor(e_coli_plate), data = resp_all_nitrate.data) #for some reason this code would not run unless I treated them as factors
+calc.relimp(lm_resp_2_relimp, type="lmg", rela=TRUE)
+#need to identify exactly what lmg means
+```
+
+
+```{r Tukey posthocs for linear models}
+#Posthocs of emmeans package
+
+# Question: is there a dose of nitrate where we see a statistically significant effect on respiration?
+#Pairwise for N_species_dose
+emm_resp_2_N_species_dose=emmeans(mm_resp_2, specs=pairwise ~ N_species_dose)
+summary(emm_resp_2_N_species_dose)
+ # contrast          estimate       SE  df t.ratio p.value
+ # CNTRL_0 - N_1.5 -0.0004036 0.000225 287  -1.795  0.2777
+ # CNTRL_0 - N_18   0.0003303 0.000244 304   1.352  0.5308
+ # CNTRL_0 - N_5    0.0000634 0.000233 300   0.272  0.9930
+ # N_1.5 - N_18     0.0007339 0.000243 296   3.026  0.0143 ***
+ # N_1.5 - N_5      0.0004670 0.000232 291   2.016  0.1843
+ # N_18 - N_5      -0.0002669 0.000246 290  -1.086  0.6981
+
+#What does this all mean?
+
+#The p value is pretty straight forward, it is a Tukey's pairwise comparison checking the difference between those two treatments
+#The estimate is a bit more interesting and goes to our effect size. The effect that I am looking at is respiration rate, so the effect size is a change in respiration rate. How I would read this, looking specifically at the N_1.5 - N_18 row, is that corals that experienced the N_18 treatment respired 0.0007339 umols more than corals under the N_1.5 treatment. The pattern that I have found is that if the estimate is negative, then the first treatment had a higher value for respiration rate, an dif the estimate is positive, then the second treatment had a higher value for respiration rate.
+
+```
+
+```{r generalized additive models (GAM)}
+# Load mgcv
+library(mgcv)
+
+# Fit the model
+gam_mod <- gam(accel ~ s(times), data = mcycle)
+#s is the smoothing function, we want the x axis to be smoothed here, times that the crash dummy hit its head
+#for my environmental data I would want the smoothed data to be season 
+?gam()
+
+# Plot the results
+plot(gam_mod, residuals = TRUE, pch = 1)
+#pch is the plot character to use
+
+# Fit a GAM with 3 basis functions
+gam_mod_k3 <- gam(accel ~ s(times, k = 3), data = mcycle)
+#k gives you the number of basis functions
+
+# Fix the smoothing parameter at 0.1
+gam_mod_s1 <- gam(accel ~ s(times), data = mcycle, sp = 0.1)
+#sp is the smoothing parameter
+
+# Fit the GAM
+gam_mod_sk <- gam(accel ~ s(times, k=50), sp=0.0001, data = mcycle)
+#Visualize the model
+plot(gam_mod_sk, residuals = TRUE, pch = 1)
+#this is REALLY wiggly 
+
+#if you want to add linear models or categorical data you just add + with no s function like such:
+model3 <- gam(hw.mpg ~ s(weight) + fuel, data= mpg, method= "REML")
+#store categorical variables as factors
+
+#using the by function you can tell R to calculate a different smooth for each category, below R will calculate a different smooth for diesel vs. gas fuel types
+model4 <- gam(hw.mpg ~ s(weight, by=fuel), data= mpg, method= "REML")
+
+
+# Fit a model to predict city fuel efficiency (city.mpg) with smooth terms of weight, length, and price, but make each of these smooth terms depend on the drive categorical variable using by= in the smooth terms. Include a separate linear term for the drive variable.
+mod_city3 <- gam(city.mpg ~ s(weight, by= drive) + s(length, by=drive) + s(price, by=drive), + drive data = mpg, method = "REML")
+
+#can you use the summary() function
+
+#parametric terms of model: linear terms in the model
+
+# ONE EXAMPLE WITH MY DATA
+
+require("mgcv")
+pounds_school_gam <- gam(Number.of.Pounds ~ s(Number.of.Schools), data = menhaden_all, method="REML")
+summary(pounds_school_gam)
+plot(pounds_school_gam, scale = 0)
+layout(1)
+gam.check(pounds_school_gam)
+#interpreting results from summary() function and plot() graph
+#When interpreting GAM results, we want to see when the confidence interval (the dotted bands) departs from 0. For this one, it looks like there is a positive relationship between number of schools and biomass under 225 schools
+#GAMs can also "explode" at the end, meaning that the confidence interval is really big
+#WHAT WE ARE LOOKING FOR IN THE DIAGNOSTIC PLOTS
+# We want the response v fitted to be a 1:1 straight linear line with the dots surrounding it
+# We want the histogram of residuals to look like a normal distribution
+# We want residuals vs. linear to look random – like a blood splatter lol
+# For the Q-Q you want it to follow the line. Anything BELOW 0 is underestimating the error, anything ABOVE 0 is overestimating the error
+
+#terms outside of the s() function are LINEAR terms
+
+
+```
+
+```{r Preparing for ggplot}
+
+#Often times before you actually plot you want to make sure your data is going to display correctly. This means you may have to subset, or re-organize a particular variable so it displays in the order that you want it to 
+#Make N species dose a factor and give it levels so it will display in this order
+
+resp_all_ammonium.data$N_species_dose <- factor(resp_all_ammonium.data$N_species_dose, levels=c("CNTRL_0", "A_5", "A_7.5","A_10"))
+#now R is stupid so we have to make sure the factor has the right levels in order
+env_chamber_HOBO_exp_2$date <- factor(env_chamber_HOBO_exp_2$date, levels=c("8/4/2022", "8/5/2022", "8/6/2022", "8/7/2022", "8/8/2022", "8/9/2022", "8/10/2022", "8/11/2022", "8/12/2022", "8/13/2022", "8/14/2022", "8/15/2022"))
+
+#Make everything else a character so they graph nicely 
+resp_all_ammonium.data$treat_ID_full<-as.character(resp_all_ammonium.data$treat_ID_full)
+resp_all_ammonium.data$e_coli_plate<-as.character(resp_all_ammonium.data$e_coli_plate)
+resp_all_ammonium.data$temp <- as.character(resp_all_ammonium.data$temp)
+
+```
+
+```{r ggplot - general code and various customizers}
+#Before you plot in ggplot, you might want to make all of your variables factors or characters and define levels so that they display in the order (left to right) that you want. 
+
+#Make N species dose a factor and give it levels so it will display in this order
+resp_all_nitrate.data$N_species_dose <- factor(resp_all_nitrate.data$N_species_dose, levels=c("CNTRL_0", "N_1.5", "N_5","N_18"))
+
+#Make everything else a character so they graph nicely 
+resp_all_nitrate.data$treat_ID_full<-as.character(resp_all_nitrate.data$treat_ID_full)
+resp_all_nitrate.data$e_coli_plate<-as.character(resp_all_nitrate.data$e_coli_plate)
+resp_all_nitrate.data$temp <- as.character(resp_all_nitrate.data$temp)
+
+#Prep the data for visualization
+#This summarySE function is my BEST FRIEND. Its in the RMisc package, and it takes your data and auto-generates standard error to be used for error bars
+sum_N_species_dose_nitrate <- summarySE(resp_all_nitrate.data, measurevar = "resp_rate", groupvars = c("N_species_dose"))
+
+# Visualize
+gg_N_species_dose_nitrate<-ggplot(data = sum_N_species_dose_nitrate, #the data is the dataframe it will pull from
+       aes(x = N_species_dose,
+           y = resp_rate, col=N_species_dose)) + #col= tells it how you want the colors to be categorized
+    geom_point() + #you want points
+    geom_errorbar(aes(ymin=resp_rate-se, ymax=resp_rate+se), width=0.1, size = 1) + #you want errorbars, calling from the summarySE function from Rmisc
+    ggtitle ("Nitrate - N Species Dose summary") + #title for the plot
+   # theme(legend.position = "right", #if you want a legend, this is how you customize it
+   #        legend.title = element_text(size=12),
+   #        axis.title = element_text(size = 12),
+   #        legend.background = element_blank(),
+   #        panel.grid.major = element_blank(),
+   #        panel.grid.minor = element_blank(),
+   #        axis.text = element_text(size = 12)) +
+   geom_jitter(width=0.15, alpha=0.9) + #adds jitters, aka overlays raw data points and spreads them apart from each other
+   theme(legend.position="none")+ #this turns off the legend
+    labs(x = "\n", 
+         y = expression(paste("Rate O2 Consumption (umol*min"^"-1"~"*g"^"-1"~")")), #x and y labels
+         caption = "data represent mean +/- SEM" ) + #gives you a caption at the bottom right
+    scale_x_discrete("Nitrate dose", labels=c(CNTRL_0="Control", N_1.5="1.5uM", N_5="5uM", N_18="18uM"))+ #relabels the x axis to the values in quotations
+    scale_color_manual("Nitrate Dose", labels=c(CNTRL_0="Control", N_1.5="1.5uM", N_5="5uM", N_18="18uM"), values=c("blue", "#9DCE9D","#359C35","darkgreen")) #gives you the colors for each point on the graph
+gg_N_species_dose_nitrate
+
+
+# A NOTE ON GGPLOT COLORS:
+  # ggplot has built in colors which can be found here: http://sape.inf.usi.ch/quick-reference/ggplot2/colour
+  # you can also add your own from a hex code using # before a unique identifier for the color. The unique identifiers can be generated here:
+  # https://htmlcolorcodes.com/
+
+
+```
+
+
+```{r ggplots - summarize by multiple particular variables}
+#You may want to visualize things binned by a couple of different independent variables
+# Summarize by N_species_dose and temperature so we can visualize
+#Make N species dose a factor and give it levels so it will display in this order
+resp_all_ammonium.data$N_species_dose <- factor(resp_all_ammonium.data$N_species_dose, levels=c("CNTRL_0", "A_5", "A_7.5","A_10"))
+#This summarySE function is my BEST FRIEND. Its in the RMisc package, and it takes your data and auto-generates standard error to be used for error bars
+sum_N_species_dose_temp_ammonium <- summarySE(resp_all_ammonium.data, measurevar = "resp_rate", groupvars = c("N_species_dose","temp"))
+# Visualize
+gg_N_species_dose_ammonium<-ggplot(data = sum_N_species_dose_temp_ammonium,
+       aes(x = N_species_dose,
+           y = resp_rate, col=temp)) +
+    geom_point() +
+    geom_errorbar(aes(ymin=resp_rate-se, ymax=resp_rate+se), width=0.1, size = 1) +
+    #scale_color_manual(values = c("black", "darkgreen")) +
+    ggtitle ("Ammonium N Species Dose and Temperature Summary") +
+    theme(legend.position = "right",
+          legend.title = element_text(size=12),
+          axis.title = element_text(size = 12),
+          legend.background = element_blank(),
+          panel.grid.major = element_blank(), 
+          panel.grid.minor = element_blank(),
+          axis.text = element_text(size = 12)) +
+    labs(x = "\n", 
+         y = expression(paste("Rate O2 Consumption (umol*min"^"-1"~"*g"^"-1"~")")), 
+         caption = "data represent mean +/- SEM" ) +
+    theme_classic()
+gg_N_species_dose_ammonium
+```
+
+```{r ggplot - Initial vs final visualization code}
+# Here is the code to make a plot that looks at two time points of the same kind of data, and includes lines with the trajectory of change in that variable
+
+### ______________Sym starved ammonium high 20C________________________ ###
+#first we need to melt the dataset by a unique identifier on the data we want to group everything by
+#melt comes from the reshape2 package which you need to load
+sym_starved_ammonium_high_20C_melt<- melt(sym_starved_ammonium_high_20C, id.vars="exp_1_beetag", measure.vars=c("PAM_avg_day1","PAM_avg_day11"))
+#lets do a paired t test now
+t.test(sym_starved_ammonium_high_20C$PAM_avg_day1,sym_starved_ammonium_high_20C$PAM_avg_day11, paired=TRUE) #p=0.01291***
+#now we can plot
+gg_sym_starved_ammonium_high_20C<-
+  ggplot(sym_starved_ammonium_high_20C_melt, aes(x=variable, y=value, color=variable)) +
+  geom_boxplot() +
+  geom_jitter(width=0.15, alpha=0.9) +
+  geom_line(aes(group=exp_1_beetag), col="darkgray")+
+  ylab("Fv/Fm value")+
+  xlab("Day of experiment")+
+  theme(legend.position="none", plot.margin = unit(c(1,3, 0.5, 7),"cm"), plot.title = element_text(size = 9)) +
+  #scale_color_manual(name = "Day of experiment",
+                     #labels = c("Day 1","Day 11"),
+                   # values = c("royalblue","darkorchid1"))+
+  scale_x_discrete(labels=c("Day 1","Day 11")) +
+ annotate("text", x = Inf, y = Inf, label = paste("paired t-test, p=0.01291***"), vjust = 1, hjust = 1, size=3)+
+  ggtitle("Ammonium High - Sym Starved Fed 20C: Day 1 vs. Day 11 Fv/Fm")
+gg_sym_starved_ammonium_high_20C
+```
+
+```{r ggplot - raw data visualization with jitters}
+#Here is code to visualize boxplots with the raw data jittered over it. This can be helpful to see the spread of your data.
+
+#sometimes you just need to make things factors before you visualize them so that they behave better in ggplot
+no_e_coli$sym_state<-as.factor(no_e_coli$sym_state)
+#now visualize
+gg_sym_state_no_ecoli<-
+  ggplot(no_e_coli, aes(x=sym_state, y=resp_rate)) +
+  geom_boxplot(width=0.8, outlier.shape = NA) + #SUPER IMPORTANT!!!! Boxplot will display outliers and so will jittering, so it will double your outliers. Make sure that you use outlier.shape = NA so that the only outliers shown are from jittering
+  geom_jitter(width=0.15, alpha=0.9) + #this overlays the raw data 
+  ylab("Respirometry rate")+
+  xlab("Treat ID")+
+  theme(legend.position="none", plot.title = element_text(size = 9)) +
+  theme(axis.text.x = element_text(angle=90, vjust=.5, hjust=1))+ #this makes the x axis labels up and down instead of side to side to prevent overlapping
+ annotate("text", x = Inf, y = Inf, label = paste("  "), vjust = 1, hjust = 1, size=3)+
+  ggtitle("Resp rate by Sym state - No E. coli")
+gg_sym_state_no_ecoli
+```
+
+```{r ggplot - stacking different datasets }
+gg_controls <- ggplot() + #make sure you call this empty ggplot()
+  geom_boxplot(data=pam_controls_merged_RANDOM, aes(x=N_species_dose, y=PAM_delta), color="black")+
+  geom_jitter(data=pam_controls_merged_RANDOM, aes(x=N_species_dose, y=PAM_delta), width=0.15, alpha=0.9, color="black") +
+   geom_boxplot(data=pam_controls_ammonium.data, aes(x=N_species_dose, y=PAM_delta), color="darkgreen")+
+  geom_jitter(data=pam_controls_ammonium.data, aes(x=N_species_dose, y=PAM_delta), width=0.15, alpha=0.9, color="darkgreen") +
+     geom_boxplot(data=pam_controls_nitrate.data, aes(x=N_species_dose, y=PAM_delta), color="dodgerblue")+
+  geom_jitter(data=pam_controls_nitrate.data, aes(x=N_species_dose, y=PAM_delta), width=0.15, alpha=0.9, color="dodgerblue") +
+  ylab("Delta PAM")+
+  xlab("Dose")+
+  theme(legend.position="none", plot.title = element_text(size = 9)) +
+  theme(axis.text.x = element_text(angle=90, vjust=.5, hjust=1))+ #this makes the x axis labels up and down instead of side to side to prevent overlapping
+ annotate("text", x = Inf, y = Inf, label = paste("  "), vjust = 1, hjust = 1, size=3)+
+  ggtitle("All controls - random")
+gg_controls
+```
+
+```{r ggplot- TRENDLINES}
+geom_smooth(method="lm", se=FALSE, aes(group = TREATMENT), linewidth = 0.85, linetype = "dotted")+
+      stat_poly_eq(use_label(c("eq", "R2")), label.y = c(0.85, 0.9, 0.95, 1), label.x = c(0.5, 0.5, 0.5, 0.5))
+
+#OR
+
+  stat_smooth_func(geom="text",method="lm",hjust=0,parse=TRUE) +
+  geom_smooth(formula = y ~ x, method="lm",se=FALSE) +
+```
+
+
+```{r Model interaction plots}
+#This is a bit complicated and I am just trying this out
+# This is the model we will be working from
+mm_resp_2 <- lmer(resp_rate ~ N_species_dose + e_coli_plate + sym_state + temp + (1|vial_ID) + (1 | col_num), data=resp_all_ammonium.data)
+summary(mm_resp_2)
+
+
+#Model Interaction plot - ammonium
+# I for some reason cannot simplify this I dont know why
+int_ammonium<-lmer(resp_rate~N_species_dose*temp*sym_state*e_coli_plate+(1|col_num), data=resp_all_ammonium.data)
+summary(int_ammonium)
+int_pred_ammonium <- ggemmeans(int_ammonium, terms=c("N_species_dose", "sym_state", "temp","e_coli_plate")) # I cannot do more than 4 interactions 
+pred_ammonium <- ggplot(int_pred_ammonium, aes(facet,predicted, colour = group)) +
+  geom_point(aes(shape = x)) +
+  geom_errorbar(aes(ymin = conf.low, ymax = conf.high), width = 0.3) +
+  labs(x = "temp", y = "Rate O2 Consumption (umol*min-1*g-1)",
+       color = "temp") +
+  facet_grid(~panel) +
+  ggtitle("test") +
+  theme_classic() +
+  theme(axis.title.x = element_text(color="black", size=12),
+axis.title.y = element_text(color="black", size=12))+
+  theme(axis.text.x = element_text(size=12),
+          axis.text.y = element_text(size=12)) +
+  scale_color_manual(values=c("black", "goldenrod"))
+pred_ammonium
+
+```
+
+
+```{r MAPS MAPS MAPS MAPS}
+
+#install.packages("ggmap")
+library(ggmap)
+#install.packages('osmdata')
+library(osmdata)
+ 
+#ggmap tutorial:
+# https://towardsdatascience.com/a-guide-to-using-ggmap-in-r-b283efdff2af
+
+#here is my API key
+#AIzaSyAZMk84DD46I0EMsHm0ZzSD8ATpZPQWKBo
+
+#lets graph lisbon for funsies
+lisbon_map <- get_map( getbb('lisbon'), source="stamen")
+ggmap(lisbon_map)
+
+#how to set up an API key (you need to link a credit card)
+# https://www.findingyourway.io/blog/2018/12/05/2018-12-05-using-ggmap-after-july-2018/
+api_secret <- 'AIzaSyAZMk84DD46I0EMsHm0ZzSD8ATpZPQWKBo' #PLEASE DO NOT USE MY API KEY, MAKE YOUR OWN!
+#sounds scary but its pretty much impossible for us to reach the limit where we would be charged, each time you run get_googlemap you are charged 0.002 USD and google gives you $200 a month, so 1000 maps are $2
+register_google(key = api_secret)
+
+narra_sat <- get_map("Prudence Island, Rhode Island", maptype='satellite', source="google", api_key = api_secret, zoom=10)
+ggmap(narra_sat)
+
+astrangia_pop_locations <- data.frame(lat = c(41.717719, 41.478478), #remember you will have to rearrange here because lats need to go together and lons need to go together
+                               lon = c(-71.360080, -71.354022))
+
+providence <- data.frame(lat= 41.826901, lon= -71.413924)
+
+labels=c("Conimicut Point","Ft. Wetherill")
+ggmap(narra_sat) +
+   geom_point(data = astrangia_pop_locations, aes(x = lon, y = lat), color = "orange", size = 4) +
+  geom_text_repel(data=astrangia_pop_locations, aes(label = c("Conimicut Point","Ft. Wetherill")), color="white")+
+  geom_point(data=providence, aes(x = lon, y = lat), color = "blue", size = 5) +  geom_text_repel(data=providence, aes(label = "Providence"), color="white")+
+  ggtitle("Astrangia Populations in Narragansett Bay")
+
+```
+
+```{r writing CSV}
+write.csv(df,file='/Users/admin/new_file.csv', row.names=TRUE)
+```
+
