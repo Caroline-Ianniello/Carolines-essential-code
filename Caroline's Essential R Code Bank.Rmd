@@ -26,13 +26,14 @@ library("see")
 library("ggrepel")
 
 #increase the number of results it will show
-options(max.print=1000000)
+options(max.print=1000000) #this just prevents R from truncating the number of decimal places it will show you
 ```
 
 ```{r Establishing your working directory and uploading data}
 #Establish working directory
 require("knitr")
 opts_knit$set(root.dir = "C:/Users/carol/Downloads") #I find that when doing R markdowns (which is what I use the most) using knitr to define my working directory works best
+#NOTE if you are profficient in R and use R projects, you don't need knitr
 getwd() #this will tell you what your current working directory is
 
 #Upload your data
@@ -53,7 +54,7 @@ git pull origin master #often you can just skip this
 # set up GitHub repo to track changes on local machine
 git push -u origin master
 
-#now eveything should be connected and you can use the R studio git tab as normal
+#now everything should be connected and you can use the R studio git tab as normal
 ```
 
 ```{r Testing for normality and package to suggest transformation}
@@ -334,12 +335,45 @@ model4 <- gam(hw.mpg ~ s(weight, by=fuel), data= mpg, method= "REML")
 # Fit a model to predict city fuel efficiency (city.mpg) with smooth terms of weight, length, and price, but make each of these smooth terms depend on the drive categorical variable using by= in the smooth terms. Include a separate linear term for the drive variable.
 mod_city3 <- gam(city.mpg ~ s(weight, by= drive) + s(length, by=drive) + s(price, by=drive), + drive data = mpg, method = "REML")
 
-#can you use the summary() function
+# INTERPRET RESULTS FROM GAM
+summary(mod_city3)
+# Family: what distribution it is assuming
+# Gaussian = normal
+# Link: identity means it did not transform anything
+# Parametric coefficients are the linear components
+# Approximate significance of smooth terms covers the smooth terms
+# edf= effective degrees of freedom, tells us the complexity of the smooth 
+# IMPORTANT: an EDF of 1 is a straight line (linear)
+# P values are approximate
+# A significant p value is one where you cannot draw a horizontal line through the 95% confidence interval
 
-#parametric terms of model: linear terms in the model
+
+# VISUALIZING OUR GAM MODEL
+plot(mod) #gives us the regular plot
+#partial effects plots show the contribution of each smooth or linear effect of the model, which add up to the overall predictions
+plot(mod, shade=TRUE, shade.col="hotpink") #shows us the confidence intervals in shade rather than dotted, and you can adjust the color using shade.col
+plot(mod, residuals=TRUE) #adds the residuals in dots around the plot
+plot(mod, residuals=TRUE, pch=1, cex=1) #changes the size of the residuals
+plot(mod, select=3) #select only the price partial effect, which is term #3 in the model
+plot(mod, pages=1, all.terms=TRUE) #plot all the effects in one page (YOU PROBABLY JUST WANT TO USE THIS)
+plot(mod, select = 1, shift = coef(mod)[1], seWithMean = TRUE) #this shifts the vale of the intercept (which just allows it to be in terms of the scale we are interested in, it just adds a constant so that the numbers are interpretable) and includes uncertainty of the model with the seWithMean function, generally we want seWithMean=TRUE
+
+#CHECKING THE MODEL FOR FITTING
+gam.check(mod)
+#first it checks for convergence, if the model has not converged its really not a good model, usually happens when there are too many parameters in the model for not enough data
+#basis checking results shows a statistical test for patterns in residuals, which should be random
+#each basis check shows the k value (number of basis functions) and p value. If p value is SIGNIFICANT, then residuals are NOT randomly distributed, which means that there are not enough basis functions
+#we want the p values here to NOT be significant
+#generates 4 plots:
+  #we want q-q plot that is close to a straight line
+  #we want histogram to be bell shape
+  #residuals vs. linear predictions should be randomly distributed around 0
+  #response vs. fitted values should clister around the 1:1 linear up line
+
+
+
 
 # ONE EXAMPLE WITH MY DATA
-
 require("mgcv")
 pounds_school_gam <- gam(Number.of.Pounds ~ s(Number.of.Schools), data = menhaden_all, method="REML")
 summary(pounds_school_gam)
