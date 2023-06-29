@@ -6,6 +6,8 @@ editor_options:
   chunk_output_type: inline
 ---
 # Welcome to Caroline's Essential R Code Notebook! These are in no particular order, just the code I find I use most and is most useful. Obviously, these are taken from different r projects and no data is provided, so you will have to play around with the variables and/or datasets that are comparable to what I have generated. But this should at least be a good place to start. In the event that a function does not work, google "what package is x function in"? And you may have to install and then library that package.
+
+#INPUTTING PACKAGES and DATA
 ```{r common packages that you will probably want}
 library("lme4")
 #install.packages("lmerTest")
@@ -85,6 +87,8 @@ resp_all_nitrate.data$ordernorm_resp_rate<-orderNormobj_resp_rate$x.t
 resp_all_nitrate.data$log_resp_rate<-log(abs(resp_all_nitrate.data$resp_rate))
 ```
 
+#BASIC DATA MANIPULATION
+
 ```{r Checking if there are outliers in the dataset}
 #If you think there might be a statistical outlier in your dataset, you can do a grubbs test, which will tell you if there is an outlier and the value of that outlier
 #This function is in the outliers package
@@ -111,6 +115,8 @@ all_20C<-subset(resp_all_nitrate.data, resp_all_nitrate.data$temp==20)
 env_chamber_HOBO_exp_2<- env_chamber_HOBO[env_chamber_HOBO$date  %in% c("8/4/2022", "8/5/2022", "8/6/2022", "8/7/2022"),] #the comma is important at the end here, tells R that we are looking at ROWs not entire columns
 
 ```
+
+# STATISTICAL TESTS AND MODELING
 
 ```{r T tests parametric and nonparametric}
 #When your data follows a normal distribution
@@ -296,7 +302,7 @@ summary(emm_resp_2_N_species_dose)
 
 ```
 
-```{r generalized additive models (GAM)}
+```{r Generalized additive models (GAM)}
 # Load mgcv
 library(mgcv)
 
@@ -333,7 +339,8 @@ model4 <- gam(hw.mpg ~ s(weight, by=fuel), data= mpg, method= "REML")
 
 
 # Fit a model to predict city fuel efficiency (city.mpg) with smooth terms of weight, length, and price, but make each of these smooth terms depend on the drive categorical variable using by= in the smooth terms. Include a separate linear term for the drive variable.
-mod_city3 <- gam(city.mpg ~ s(weight, by= drive) + s(length, by=drive) + s(price, by=drive), + drive data = mpg, method = "REML")
+mod_city3 <- gam(city.mpg ~ s(weight, by= drive) + s(length, by=drive) + s(price, by=drive), + drive, data = mpg, method = "REML")
+#by=drive allows it to fit a smooth for every kind of drive category
 
 # INTERPRET RESULTS FROM GAM
 summary(mod_city3)
@@ -346,6 +353,7 @@ summary(mod_city3)
 # IMPORTANT: an EDF of 1 is a straight line (linear)
 # P values are approximate
 # A significant p value is one where you cannot draw a horizontal line through the 95% confidence interval
+coef(mod_city3) #can tell you the number of basis functions based on the number of coefficients
 
 
 # VISUALIZING OUR GAM MODEL
@@ -369,10 +377,77 @@ gam.check(mod)
   #we want histogram to be bell shape
   #residuals vs. linear predictions should be randomly distributed around 0
   #response vs. fitted values should clister around the 1:1 linear up line
+#if one of the p values is significant, just play with the k= to figure out a better fit and keep using gam.check() until all of the p values under basis dimensions are not significant
 
+#CHECKING CONCURVITY
+#In linear models, colinearity is when two variables are so highly correlated that the model could fit to either one of them, and the model fit gets messed up
+#Concurvity is when one variable looks like the smooth curve of another, WE DONT WANT THIS
+concurvity(mod, full=TRUE) #full=TRUE reports concurvity for each smooth, aka how much each smooth is determined by all the other smooths
+#if "worst" if over 0.8, inspect your model more carefully
+concurvity(mod, full=FALSE) #full=FALSE returns matrices of pairwise concurvities (you usually want to do this AFTER you do full=TRUE), they pretty much just show how each variable is predetermined by each other variable so you can see which variables are the most closely related
+#NOTE: the lower the concurvity, the lower the similarity to the other variables (we really want them to be different so the model can do what it needs to do)
 
+# TWO DIMENSIONAL / MULTIDIMENTIONAL SMOOTHS
+mod2d <-gam(y ~ s(x, y), data=dat, method="REML") #models the interaction of the two variables, you can always add different linear or nonlinear components withing s() functions or  + linear term
+#summery outputs: 
+#gives you single smooth output for the combo of them 
+#this takes more effective degrees of freedom and therefore more data
+#use this when you have x and y coordinates, generally a natural way to model spatial data
+plot(mod2d) # this gives us a contour plot over space from x and y (topographic map), with the dark lines being what the model thinks and the dotted being one standard error higher or lower
+plot(mod2d, scheme=1)#3D
+plot(mod2d, scheme=2) #heat map 
+vis.gam(mod2d, #GAM object
+        view=c("x1","x2"), #variables
+        plot.type="persp", #kind of plot, 3D perspective plot
+        se=2, #displays confidence interval, to plot high and low surfaces
+        theta=220, phi=55, r=0.1) #controls the rotation and zoom
+vis.gam(mod2d, #GAM object
+        view=c("x1","x2"), #variables
+        plot.type="contour", #kind of plot, heat map
+        too.far=0.01, #too.far indicates what should NOT be plotted because they are too far from the data (too far to extrapolate), scaled from 0-1 on the range of the variables. The white boxes are the areas NOT supported by data, where the model is just not as good, basically you "extrapolate out from the data" some percentage
+        color="gray", contour.col="blue", #options for color background and lines
+        nlevels=20) #number of contour lines
 
+#FACTOR SMOOTHS-- categorical data
+#good for controlling for categories that are not our main category of interest (like if there are too many categories, or one category that has poor data quality is swinging your whole model)
+model4c <- gam(hw.mpg ~ s(weight, fuel, bs="fs"), data=mpg, method= "REML")
+summary(model4c) # we get one overall term, so we cant look at what specific categories are doing
+plot(model4c) #makes a normal plot, but this wont tell us the whole picture. We want to do:
+vis.gam(model4c, theta=125, plot.type="persp")
 
+#TENSOR DATA -- used for data on two different units of meaure (aka space or time)
+#a tensor is simlar to a smoothing parameter, but it is different in that it has two smoothing parameters, one for each variable
+#when you dont want the model to think that two variables are going to vary similarly (like space and time) you want to use a tensor
+#each variable gets its own smoothing when you are putting them in an interaction term
+gam(y ~ te(x1, x2, k=c(10,20)), data=data, method="REML") #te indicates a tensor, and you can specity a different k for each tensor
+#tensor interactions-- you want to use these when you wan to separate out the univariate effect of a variable AND its interaction term 
+gam(y ~ s(x1) + s(x2) + ti(x1,x2), data=data, method="REML") #ti allows you to ONLY look at the interaction, and not their independent effects (the smoothing functions take care of their independent effects)
+#these models need a lot of data -- I LIKE THIS I FEEL LIKE YOU WANT TO USE IT
+
+#LOGISTIC GAMS FOR BINARY OPERATORS
+#presence or absence of organisms
+#when you model a binary operator, your prediction is always between 0 and 1
+#logistic function does this -- converts binary to predictions
+log_gam<-gam(y ~ xt + s(x2), data=dat, family=binomial, method="REML") #the family=binomial is the important piece here
+summary(log_gam) #NOTE:outputs are on the log-odds scale, they need to be converted using the logistic function
+plogis(0.733) #this number was our estimate, we can use plogis to turn it into a percentage or 67% baseline chance of a positive outcome
+#the estimate tells us the probailiyt of a person making a home purchase who has mean values of all variables
+# Fit a logistic model
+plot(binom_mod) #this is on the log odds scale, so we want to change the scale
+plot(binom_mod, pages= 1, trans= plogis) #changes everything to probability
+plot(binom_mod, pages= 1, trans= plogis, shift=coef(binom_mod)[1]) #incorporates the model intercept, adds same value to everything
+plot(binom_mod, pages= 1, trans= plogis, shift=coef(binom_mod)[1], seWithMean=TRUE) #generally you want to include the SE too, and you can use shade.con to change color etc
+#you can tell what has the biggest effect on the outcome variable based on which partial effect spans the largest range on the y axis, so it has the highest probability
+
+#MAKING PREDICTIONS IN GAM
+predict(log_mod2, type="link") #generally gams are fit to the link scale which is a normal distribution im pretty sure I have NO idea why they dont just say normal
+#for the probability scale, you want type="response"
+predict(log_mod2, type="response", se.fit=TRUE) #se.fit=TRUE gives us the standard errors
+predict(log_mod2, type="terms")
+# Calculate high and low predictions intervals
+high_pred <- predictions$fit + 2*predictions$se.fit
+low_pred <- predictions$fit - 2*predictions$se.fit
+        
 # ONE EXAMPLE WITH MY DATA
 require("mgcv")
 pounds_school_gam <- gam(Number.of.Pounds ~ s(Number.of.Schools), data = menhaden_all, method="REML")
@@ -393,6 +468,8 @@ gam.check(pounds_school_gam)
 
 
 ```
+
+#GGPLOT VISUALIZATIONS
 
 ```{r Preparing for ggplot}
 
@@ -590,7 +667,7 @@ pred_ammonium
 
 ```
 
-
+#SPATIAL ANALYSES
 ```{r MAPS MAPS MAPS MAPS}
 
 #install.packages("ggmap")
