@@ -116,6 +116,20 @@ env_chamber_HOBO_exp_2<- env_chamber_HOBO[env_chamber_HOBO$date  %in% c("8/4/202
 
 ```
 
+```{r TIDYVERSE -- mutate, filter, summarize}
+
+# Change classid to be a factor
+school_3_data <-
+    school_3_data %>%
+    mutate(classid = factor(classid)) #in base R you would use as.factor() but here you use mutate
+
+#filter (similar to subset)
+school_only_entry <- menhaden_all %>% filter(is.na(Number.of.Pounds)==TRUE , Number.of.Schools>=0)
+
+```
+
+
+
 # STATISTICAL TESTS AND MODELING
 
 ```{r T tests parametric and nonparametric}
@@ -134,8 +148,73 @@ summary(aov_resp_e_coli) # you have to include this summary function here to act
 TukeyHSD(aov_resp_e_coli, "temp") #this tells you that you want to see pairwise comparisons of temperature
 ```
 
+```{r Intro to linear modeling and linear trendlines}
+#parts of a regression:
+lm(y ~ x, data=mydata)
+#multiple regression includes MULTIPLE linear response variables, each with their own predictor and slope
+#What you need to run the model / some important notes
+  #independence of PREDICTOR variables
+  #assumes linearity (normality)
+  #interactions may be important
+  #convert all predictors to factors
+  #you may need to scale parameters (e.g. make everything in the metric system)
 
-```{r Generating linear models for NORMALLY DISTRIBUTED DATA}
+#The sign of a linear regression coefficient tells you whether there is a positive or negative correlation between each independent variable and the dependent variable
+#Rs default option is to give you the difference based on the reference class of each predictor variable
+#Reference grup is always the first group in a factor unless you hcange the setting
+
+
+#adding a linear trendline
+reg_model<-kn(response ~ predictor, data=reg_demo)
+summary(reg_model)
+reg_model
+reg_coef_plot <- tidy(reg_model) #extract the coefficients from the reg model 
+#now we can plot the trendline
+ggplot(reg_model, aes(x=predictor, y=response)) +
+  geom_point() + 
+  theme_minimal () +
+  geom_abline(intercept = reg_model$estimate[1],
+                  slope = reg_model$estimate[2])
+
+#A single intercept is the global mean of the data (null model)
+# Use a linear model to estimate the global intercept
+lm(mathgain ~ 1, data = school_3_data)
+#this will give you the same answer as
+school_3_data %>%
+    summarize(mean(mathgain)) #aka, just the mean
+
+# Building a mutliple regression
+lm(mathgain ~ mathkind + classid - 1, data=school_3_data) #this -1 allows us to look at the coefficient for each classoom
+#order DOES matter here
+
+# you can graph predictions from the model as lines
+# Re-run the models to load their outputs
+lm_out <- lm(mathgain ~ classid + mathkind, data = student_data)
+lmer_out <- lmer(mathgain ~ mathkind + (1 | classid), data = student_data)
+
+# Add the predictions to the original data
+student_data_subset <-
+    student_data %>%
+    mutate(lm_predict = predict(lm_out),
+           lmer_predict = predict(lmer_out)) %>%
+    filter(schoolid == "1")
+
+# Plot the predicted values
+ggplot(student_data_subset,
+       aes(x = mathkind, y = mathgain, color = classid)) +
+    geom_point() +
+    geom_line(aes(x = mathkind, y = lm_predict)) +
+    geom_line(aes(x = mathkind, y = lmer_predict), linetype = 'dashed') +
+    xlab("Kindergarten math score") +
+    ylab("Math gain later in school") +
+    theme_bw() +
+    scale_color_manual("Class ID", values = c("red", "blue"))
+
+
+
+```
+
+```{r Basic linear models -  lm() }
 #When you have a complicated dataset and you want to see how various different independent variables effect your dependent variable and the magnitude of that effect, you usually want to create a linear model. This is essentially the same math as an ANOVA (from what Caroline understands, but she's no stats buff), but is really the gold standard for investigating the effects of your variables on your output.
 
 #When generating a linear model, you first have to decide whether or not you want to include random effects. In a simple linear model using the function lm(), you are essentially doing an ANOVA. Often, though, we have random effects such as the tank or jar the organism was in, the colony the coral came from, or something else that we want to control for so that any variation caused by that random effect is put to the side and we can see what actually infludenced the data. When you have a random effect in your data, you want a linear model with random effects, which uses the lmer() function from the lme4 package.
@@ -144,9 +223,22 @@ TukeyHSD(aov_resp_e_coli, "temp") #this tells you that you want to see pairwise 
 
 simple_model <- lm(resp_rate ~ e_coli_plate + temperature, data=resp_all.data)
 
+# NOTE: there is code that can give you a nice plot of linear model including residuals and standard error:
+termplot(lm_mod, partial.resid=TRUE, se=TRUE)
+```
+
+
+```{r Linear models with random effects - LMER }
+
 random_effects_model <- lmer(resp_rate ~ e_coli_plate + temperature + (1|tank_number), data=resp_all.data) #adding this random effect of tank number will allow me to investigate whether the data was influenced by the tank the corals were in
-  
-# !!!!!!  
+#using the (1|tank_number) syntax allows the intercept to vary between levels of tank_number
+#There are several different ways to include a random effect in your linear model based on what you want:
+(1 | group) # random intercept with fixed mean
+(1 | g1/g2) # intercepts vary among g1 and g2 within g1
+(1 | g1) + (1 | g2) # random intercepts for 2 variables
+x + (x | g) # correlated random slope and intercept
+x + (x || g) #uncorrelated random slope and intercept
+
 # It is really important to know that in order to look at the results of your model, you need to use the summary() function around the object that you named the model.
 summary(simple_model)
 summary(random_effects_model)
@@ -156,7 +248,8 @@ summary(random_effects_model)
 #Example model:
 resp_random_model <- lmer(resp_rate ~ N_species_dose + food +(1|vial_ID), data=resp_all_nitrate.data)
 summary(resp_random_model)
-
+fixedf(resp_random_model) #gives us the fixed - effects estimates
+confint(resp_random_model) # gives us the confidence intervals
 #Example output as it would appear in your console:
 # Linear mixed model fit by REML. t-tests use Satterthwaite's method ['lmerModLmerTest']
 # Formula: resp_rate ~ N_species_dose + food + (1 | vial_ID)
@@ -198,14 +291,36 @@ summary(resp_random_model)
 
 #The take-home that I get from this model is that either N_species_dose or food explain much about the model, because the p values for those are not significant (they are greater than 0.05).
 
+#An estimate that is negative indicates that as that value increases, the response variable decreases. For example here, N species doses of 5 and 8 seem to increase respiration rate
+
 #Honestly, when I am looking at these tables I am much more interested in pairwise comparisons between different independent variables (which we will get to in a section or two) then the effects on the whole model. But essentially this table tells you what independent variables are influencing changes in the dependent variable, and to what extent (estimate).
 
-#The intercept is a really confusing concept that I still havent even fully understood, but what I do know is that 1) we don't really care about the intercept and 2) whatever independent variable you see missing is looped into that intercept. For example, in this dataset we had to different types of food regimes, fed (F) or starved (S). In the Fixed Effects table, I see foodS but not foodF. That is because foodF is a part of the intercept, and so the model is comparing the effect of foodF (which we cannot see because it is magically inside the intercept) to foodS which we can see, and the p value for that comparison is 0.68 (not significant). Also, I dont see our control dosage of 0 for N_species_dose in the fixed effects table. That means it's wrapped up in the intercept.
+#The intercept is a really confusing concept that I still havent even fully understood, but what I do know is that 1) we don't really care about the intercept and 2) whatever independent variable you see missing is looped into that intercept. For example, in this dataset we had to different types of food regimes, fed (F) or starved (S). In the Fixed Effects table, I see foodS but not foodF. That is because foodF is the reference class, and so the model is comparing the effect of foodF (which we cannot see because it is magically inside the intercept) to foodS which we can see, and the p value for that comparison is 0.68 (not significant). Also, I dont see our control dosage of 0 for N_species_dose in the fixed effects table. That means it's wrapped up in the intercept.
 
 #Effect size can be interesting to look into, but it's more helpful to look into when there are more straight forward pairwise interactions in our posthocs (more on that in a bit)
 
+#A negative correlation number tells us if we were to do this experiment again, we would expect a negative relationship between our fixed effects and intercept
+
 # NOTE: there is code that can give you a nice plot of linear model including residuals and standard error:
 termplot(lm_mod, partial.resid=TRUE, se=TRUE)
+
+# LMER models with random-effect slopes
+# you may want to use a random-effect slope if you have reason to believe some factor will influence several things-- If we are looking at state birth data, we can estimate random-effect slopes for each state like this (similar to what we did above):
+# Include the AverageAgeofMother as fixed-effect and State as a random-effect
+model_a <- lmer(BirthRate ~ AverageAgeofMother + (1 | State), county_births_data)
+tidy(model_a)
+#random-effect slope may be estimated for each group using (slope | group) syntax with lmer()
+#but lets say now we want to estimate a random-effect slope of each state, for example, perhaps the log of total population of each county, LogTotalPop, changes the birth rate of a county AND varies by state. AKA, we think that the log total pop will change WITHIN each state
+model_b <- lmer(BirthRate ~ AverageAgeofMother + (LogTotalPop | State), county_births_data)
+tidy(model_b)
+# we could also look at the age as a random effect within EACH STATE
+model_c <- lmer(BirthRate ~ AverageAgeofMother + (AverageAgeofMother | State), county_births_data)
+summary(model_c)
+
+
+
+#NOTE ON SINGULARITY:
+#is singluar warning tells us that the model is not quite right
 ```
 
 
@@ -226,6 +341,7 @@ summary(stepAIC(nullModel, # start with a model containing no variables
                 scope = list(upper = fullModel, # the maximum to consider is a model with all variables
                              lower = nullModel), # the minimum to consider is a model with no variables
                 trace = 1)) # do not show the step-by-step process of model selection
+
 
 #LINEAR MODEL WITH RANDOM EFFECTS
 #Now let's do a linear model selection on a linear model with random effects (that was generated using the lmer function from lme4 package)
@@ -277,6 +393,27 @@ lm_resp_2_relimp <- lm(resp_rate ~ factor(sym_state) + factor(temp) +
     factor(e_coli_plate), data = resp_all_nitrate.data) #for some reason this code would not run unless I treated them as factors
 calc.relimp(lm_resp_2_relimp, type="lmg", rela=TRUE)
 #need to identify exactly what lmg means
+
+# Some other notes....
+#These coefficient estimates include uncertainty and 95% confidence interval (CI) captures this uncertainty. If a parameter's 95% confidence interval does not include zero, then the parameter is likely statistically different from zero.
+# Extract coefficents
+lmer_coef <-
+    tidy(lmer_classroom, conf.int = TRUE)
+# Print coefficents
+print(lmer_coef)
+# Plot results
+lmer_coef %>%
+    filter(effect == "fixed" & term != "(Intercept)") %>%
+    ggplot(., aes(x = term, y = estimate,
+                  ymin = conf.low, ymax = conf.high)) +
+    geom_hline(yintercept = 0, color = 'red') + 
+    geom_point() +
+    geom_linerange() +
+    coord_flip() +
+    theme_bw() +
+    ylab("Coefficient estimate and 95% CI") +
+    xlab("Regression coefficient")
+
 ```
 
 
@@ -469,6 +606,49 @@ gam.check(pounds_school_gam)
 
 ```
 
+```{r Datacamp course - Hierarchical and Mixed Effects models in R}
+#generally you want to use mixed-effect models for nested or repeat measures data
+#nested design -- different things may effect outcomes
+#random effect pools information across treatments
+
+#summarizing data
+# Summarize the student data at the classroom level
+class_data <- student_data %>%
+    group_by(classid, schoolid) %>%
+      summarize(mathgain_class = mean(mathgain),
+      mathknow_class = mean(mathknow),
+      n_class = n(), .groups = "keep") #.groups ="keep" tells summarize() to keep the grouping variable
+
+#parts of a regression:
+lm(y ~ x, data=mydata)
+#multiple regression includes MULTIPLE linear response variables, each with their own predictor and slope
+
+# you can graph predictions from the model as lines
+# Re-run the models to load their outputs
+lm_out <- lm(mathgain ~ classid + mathkind, data = student_data)
+lmer_out <- lmer(mathgain ~ mathkind + (1 | classid), data = student_data)
+
+# Add the predictions to the original data
+student_data_subset <-
+    student_data %>%
+    mutate(lm_predict = predict(lm_out),
+           lmer_predict = predict(lmer_out)) %>%
+    filter(schoolid == "1")
+
+# Plot the predicted values
+ggplot(student_data_subset,
+       aes(x = mathkind, y = mathgain, color = classid)) +
+    geom_point() +
+    geom_line(aes(x = mathkind, y = lm_predict)) +
+    geom_line(aes(x = mathkind, y = lmer_predict), linetype = 'dashed') +
+    xlab("Kindergarten math score") +
+    ylab("Math gain later in school") +
+    theme_bw() +
+    scale_color_manual("Class ID", values = c("red", "blue"))
+
+```
+
+
 #GGPLOT VISUALIZATIONS
 
 ```{r Preparing for ggplot}
@@ -625,6 +805,25 @@ gg_controls <- ggplot() + #make sure you call this empty ggplot()
  annotate("text", x = Inf, y = Inf, label = paste("  "), vjust = 1, hjust = 1, size=3)+
   ggtitle("All controls - random")
 gg_controls
+
+
+#stacking multiple y values from the same dataset (different variables)
+#lets try those tidy skills
+water_qual_graph <- water_qual_bigelow_3A %>% 
+  select("treatment_ID","NO3_INTENDED", "NO3_uM") %>% 
+pivot_longer(-treatment_ID, names_to = "variable", values_to = "value")
+
+gg_intended_v_actual <- ggplot(water_qual_graph, aes(treatment_ID, value, colour = variable)) +  
+   scale_color_manual(values=c("black","dodgerblue")) +
+  geom_point() +
+  ylab("Nitrate level (uM)")+
+  xlab("Treatment ID")+
+  theme(axis.text.x = element_text(angle=90, vjust=.5, hjust=1)) + #this makes the x axis labels up and down instead of side to side to prevent overlapping
+  ylab("Nitrate level (uM)")+
+  xlab("Treatment ID")+
+  ggtitle("Nitrate Levels -- Intended vs. measured")
+gg_intended_v_actual
+
 ```
 
 ```{r ggplot- TRENDLINES}
