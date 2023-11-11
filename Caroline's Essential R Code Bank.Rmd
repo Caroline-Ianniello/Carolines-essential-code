@@ -5,24 +5,20 @@ output: html_notebook
 editor_options: 
   chunk_output_type: inline
 ---
-# Welcome to Caroline's Essential R Code Notebook! These are in no particular order, just the code I find I use most and is most useful. Obviously, these are taken from different r projects and no data is provided, so you will have to play around with the variables and/or datasets that are comparable to what I have generated. But this should at least be a good place to start. In the event that a function does not work, google "what package is x function in"? And you may have to install and then library that package.
+# Welcome to Caroline's Essential R Code Notebook! These functions and syntax references are in no particular order, just the code I find I use most and is most useful. Obviously, these are taken from different r projects and no data is provided, so you will have to play around with the variables and/or datasets that are comparable to what I have generated. But this should at least be a good place to start. In the event that a function does not work, google "what package is x function in"? And you may have to install and then library that package. Also recall that you can use ?function() (e.g. ?reshape) to ask R for the documentation on the function.
 
 #INPUTTING PACKAGES and DATA
-```{r common packages that you will probably want}
+```{r Install and upload packages commonly used}
+#Generally, to install a package that you need you use the function install.packages(), to actually call that package into your working environment you use library()
 library("lme4")
-#install.packages("lmerTest")
 library("lmerTest")
-#install.packages("emmeans")
 library("emmeans")
-#install.packages("pbkrtest")
 library("pbkrtest")
-#reshape melts our datasets in the way we want
-library("reshape2")
-library("dplyr")
+library("reshape2") #reshape melts our datasets in the way we wan
 library("plyr")
 library("tidyverse")
+  #tidyverse contains ggplot2, tibble, dplyr, stringr, tibble, and readr
 library("Rmisc")
-library("ggplot2")
 library("performance")
 library("see")
 library("ggrepel")
@@ -31,18 +27,30 @@ library("ggrepel")
 options(max.print=1000000) #this just prevents R from truncating the number of decimal places it will show you
 ```
 
-```{r Establishing your working directory and uploading data}
+```{r Working directory}
 #Establish working directory
 require("knitr")
 opts_knit$set(root.dir = "C:/Users/carol/Downloads") #I find that when doing R markdowns (which is what I use the most) using knitr to define my working directory works best
-#NOTE if you are profficient in R and use R projects, you don't need knitr
+#NOTE if you are use R projects, you don't need knitr
 getwd() #this will tell you what your current working directory is
-
-#Upload your data
-total_data <- read.csv("C:/Users/carol/Downloads/THESIS_DATA_INITALFINAL.csv", header = TRUE) #this is how you add data. Header=TRUE tells R that there is a header column with data labels.
 ```
 
-```{r GIT}
+
+```{r Upload data / write data to a csv}
+#Upload your data from CSV
+total_data <- read.csv("C:/Users/carol/Downloads/data.csv", header = TRUE) #this is how you add data. Header=TRUE tells R that there is a header column with data labels.
+#or if you are in a project
+total_data <- read.csv("data.csv", header=TRUE) #you just dont need the extra working directory because it knows what working directory to pull it from
+
+#Uploading data from excel spreadsheet
+data_sockeye <- readxl::read_xls("pnas.1417063112.sd02.xls",na = "NA", sheet=1)
+
+#write data to a csv
+write.csv(df,file='/Users/admin/new_file.csv', row.names=TRUE)
+
+```
+
+```{r Connect GIT repro on machine to github}
 #if you have a git file already on your computer and want to put everything into a repository, do the following in the TERMINAL:
 # move to the project directory
 cd Projects/website
@@ -58,6 +66,271 @@ git push -u origin master
 
 #now everything should be connected and you can use the R studio git tab as normal
 ```
+
+
+#BASIC DATA MANIPULATION
+
+```{r tidyverse 101 - rename() / mutate() / filter() / select()}
+
+#Tidyverse is awesome for data manipulation (specifically dyplr) and I was hesitant to use it for WAY too long. Here is an example of how it works:
+seq=(seq(from=1, to=50, by=3))
+data <- data.frame(seq=(seq(from=1, to=50, by=3)),num=seq*10)
+#this is just a random dataset I made with a seqence of numbers in two columns
+
+#Rename seq to sequence
+data %>% #use the pipe operator to add lines of code on the same dataset together
+  rename(sequence=seq)
+data #now we have changed "seq" to "sequence"
+
+#Mutate to make a new column depending on a condition
+wq_all <- wq_all %>% mutate(season = case_when(
+    month==1 | month==2 | month==3 ~ "Winter" , #need two equal signs
+      month==4 | month==5 | month==6 ~ "Spring" ,
+    month==7 | month==8 | month==9 ~ "Summer" ,
+    month==10 | month==11 | month==12 ~ "Fall" 
+  )
+)
+
+# OR  
+data_sockeye_seymour %>%
+ mutate("data_segment" = case_when(
+    yr >= 1948 | yr <= 1976 ~ "1948-1976",
+   yr >= 1977 |  yr <= 2005 ~ "1977-2005"  #need two equal signs
+   ))
+
+#Subset in tidyverse using filter()
+menhaden_flights <- menhaden_all %>%
+  filter(Flight.Type!="DMF Validation Flight") %>% #filtering only if it was NOT a validation flight
+  filter(Did.Not.Fly==0)
+
+
+# Change classid to be a factor
+school_3_data <-
+    school_3_data %>%
+    mutate(classid = factor(classid)) #in base R you would use as.factor() but here you use mutate
+
+#select only these columns from our dataset to create a new dataset
+wq_menhaden_all_lag_NEW <- wq_menhaden_all_lag %>%
+  dplyr::select(year, season_lag, zone, depth, avg_chl, avg_temp, avg_sal, avg_DO, avg_DO_pct, avg_depth, avg_pH, avg_turb, Number.of.Schools, Number.of.Pounds, Pilot.Name, Sea.Conditions, Sky.Conditions)
+
+```
+
+
+```{r changing column names rename() and removing them with select() }
+#renaming columns in tidyverse
+data %>% 
+  rename(sequence=seq) #new_name = old_name
+data
+
+#lets make a new dataset that ONLY has sequence, not num
+data_no_num <- data %>%
+  select(-num) #the minus sign just means don't include it
+
+#renaming columns in base R if dplyr freaks out
+colnames(pam_all.data)[colnames(pam_all.data) == "sym_state"] ="sym_state_full"
+colnames(pam_all.data)[colnames(pam_all.data) == "sym_state.1"] ="sym_state"
+colnames(pam_all.data)[colnames(pam_all.data) == "temp.1"] ="temp"
+
+
+```
+
+```{r Subsetting OR selecting}
+
+#These are based off of logical operators, so this will only subset resp_all_nitrate where resp_all_nitrate == 20 is TRUE
+all_20C<-subset(resp_all_nitrate.data, resp_all_nitrate.data$temp==20)
+#in subsetting the &, aka "and" is an additive function, and |, aka "or" takes anything that has either criteria
+
+#selecting data by row (a condition within  a column)
+env_chamber_HOBO_exp_2<- env_chamber_HOBO[env_chamber_HOBO$date  %in% c("8/4/2022", "8/5/2022", "8/6/2022", "8/7/2022"),] #the comma is important at the end here, tells R that we are looking at ROWs not entire columns
+
+#filter (similar to subset)
+school_only_entry <- menhaden_all %>% filter(is.na(Number.of.Pounds)==TRUE , Number.of.Schools>=0)
+```
+
+```{r pivot}
+#flip using pivot so that all of the unique water quality observations are on the top 
+wq_pivot <- wq_all %>%
+  pivot_wider(names_from=parameter, values_from=measure)
+
+
+```
+
+```{r group_by and then summarize() a dataset}
+#you can use group_by to group the data so that you can perform some functions by batching. Let's say we have our water quality data and we want to group by zone, depth, and date. Then we want to summarize (aka mean or something) those at the SAME zone, depth, and date. Basically it makes little mini subdatasets that you can manipulate
+wq_avg_over_zone  <- wq_pivot  %>% 
+  group_by(zone, depth, date_formatted) #this is really helpful before you plot something
+?group_by
+#you can always ungroup if you want to
+wq_all_lag_2  <- ungroup(wq_all_lag_2)
+
+?summarise()
+#creates a new data frame that has one row for each combination of grouping variables (NEED TO group_by first) this can be really helpful for plotting
+wq_all_lag_2 <- wq_all_lag_1 %>%
+  group_by(year, zone, depth, season_lag) %>%
+  dplyr::summarise(across(all_of(v_avg_wq), #sometimes you have to specify that you want the dyplr function because there are other summarise() functions
+                mean,na.rm=T)) #summarizing them by the mean
+      
+
+```
+
+
+```{r joining datasets together and ensure no repeat observations}
+#join our water quality and menhaden data by date_formatted and zone
+wq_menhaden_all<- left_join(wq_avg_over_zone, menhaden_all, by=join_by(date_formatted, zone))
+
+#makes sure that there are no repeat observations using distinct()
+wq_menhaden_all_1<- wq_menhaden_all %>%
+  distinct(date_formatted, zone, depth, .keep_all = T) # .keep_all=T just keeps all the other columns
+```
+
+# CODING BUILDING BLOCKS: FOR, WHILE, IF/ELSE, FUNCTIONS
+```{r for loops}
+#general recipe
+for(ITERATOR in VALUE_SET){
+  YOUR_CODE_HERE
+}
+
+Population_size <- 0
+Constant_growth <- 2
+
+for(ITERATOR in 1:10){ #go through this loop 10 times, printing the output every time
+  Population_size = Population_size + Constant_growth
+  print(Population_size)
+}
+
+#now initialize using an empty vector
+vector_pop_size <- vector()
+pop_size <- 0
+constant_growth <- 2
+for (ITERATOR in 1:10) {
+  pop_size <- pop_size + constant_growth
+  vector_pop_size[ITERATOR] <- pop_size
+}
+#Iterator in this case tells us WHERE in the resulting vector to put to solution to the for loop
+
+
+#More complicated example
+N_ <- 5000 #initialize the code with input values
+m_ <- 500
+K_ <- 500
+
+v_N_estimate <- vector(length=100) #create an empty vector for it to put data into
+?sample
+
+for(iter_i in 1:length(v_N_estimate)){
+  
+  fish_vector <- vector(length=N_) #create an empty vector
+  
+  individuals_1 <- sample(N_,m_) #grab a random sample of 1:N_ (1:5000) of  length m_ (500)
+  fish_vector[individuals_1] <- 1 #put the value of 1 into the individuals_1 position in fish_vector
+  
+  individuals_2 <- sample(N_,K_) #grab a new random sample of 1:N_ (1:5000) of  length m_ (500)
+  k_i <- sum(fish_vector[individuals_2]) #take the sum of fish_vector at the indices of individuals_2
+  
+  v_N_estimate[iter_i] <- m_*K_/k_i
+}
+```
+
+```{r while() loop}
+
+
+```
+
+```{r functions}
+#generally what we want to do is store a variable with a set of instructions
+NAME_FOR_FUNCTION <- function(INPUTS){
+  CALCULATIONS
+  return(OUTPUT)
+}
+
+f_demo_3_input <- function(x,m,b){ #every time you call the function you need to input x, m and b
+  y = m*x+b
+  return(y)
+}
+
+f_demo_3_input(x=2, m=2, b=7) #now we have a solution to these instructions
+
+#more complicated function
+do_1_mark_recapture <- function(total_population,catch_sample_1,catch_sample_2){
+  fish_vector <- vector(length=total_population)
+  
+  individuals_1 <- sample(total_population,catch_sample_1)
+  fish_vector[individuals_1] <- 1
+  
+  individuals_2 <- sample(total_population,catch_sample_2)
+  number_recatch <- sum(fish_vector[individuals_2])
+  
+  return(number_recatch)
+}
+
+#or 
+
+#Code to define your function that calculates dN/dt
+dn_dt_function_logistic <- function(N_i_ , r_ ,K_, E_){
+  dn_dt <- (r_ * N_i_*(1-(N_i_ / K_))) - (E_*N_i_)} #this calculates dn/dt at a particular population level
+results <- dn_dt_function_logistic(N_i_=1, r_=1 ,K_=2, E_=0) #so that does work
+
+
+```
+```{r While loops}
+#It is similar to a for loop, but with a conditional statement
+#This is helpful when we want to know HOW many interations it take to complete some task
+while(CONDITION){
+  CODE
+}
+
+#simple example:
+counter <- 1 #initialize the while loop
+while(counter < 10){ #go until you hit 9
+  print(counter)
+  counter = counter + 1
+}
+
+#or 
+
+#how many cell divisions it takes to over 10 million cells
+N_cells <- 1 #initialize
+counter <- 1 #counting the generations, but need to initialize first
+while(N_cells < 10000000){
+ N_cells <- N_cells*2 #(or N_cells + N_cells)
+  #population change
+ counter <- counter + 1
+}
+print(counter) #took 25 generations
+
+#or 
+N_fish_t <- .5
+dt <- 0.05
+counter <- 0
+while(counter < 40){
+  counter <- counter + 1
+  N_fish_t <- N_fish_t + (N_fish_t * (1 - N_fish_t))*dt
+  print(N_fish_t)
+}
+```
+
+```{r if / else }
+#generally the guts of these work in Boolean true / false
+if(CONDITION){
+  CODE_1
+}else{
+  CODE_2
+}
+
+
+#simple example
+a <- 1
+b <- 2
+if(a < b){
+  print("Yes!")
+}else{
+  print("No!")
+}
+
+```
+
+
+# STATISTICAL TESTS AND MODELING
 
 ```{r Testing for normality and package to suggest transformation}
 # In order to do a lot of statistical tests, you want your data to be normal. You can test this visually by looking at Q-Q plots and histograms. You should do this for each of your dependent variables.
@@ -87,8 +360,6 @@ resp_all_nitrate.data$ordernorm_resp_rate<-orderNormobj_resp_rate$x.t
 resp_all_nitrate.data$log_resp_rate<-log(abs(resp_all_nitrate.data$resp_rate))
 ```
 
-#BASIC DATA MANIPULATION
-
 ```{r Checking if there are outliers in the dataset}
 #If you think there might be a statistical outlier in your dataset, you can do a grubbs test, which will tell you if there is an outlier and the value of that outlier
 #This function is in the outliers package
@@ -96,41 +367,6 @@ resp_all_nitrate.data$log_resp_rate<-log(abs(resp_all_nitrate.data$resp_rate))
 #library(outliers)
 grubbs.test(resp_all_nitrate.data$resp_rate) 
 ```
-
-```{r changing column names and removing them }
-#changing some column names
-pam_all.data<-subset(pam_all.data, select = -c(temp))
-#renaming columns in base R because dplyr is freaking out
-colnames(pam_all.data)[colnames(pam_all.data) == "sym_state"] ="sym_state_full"
-colnames(pam_all.data)[colnames(pam_all.data) == "sym_state.1"] ="sym_state"
-colnames(pam_all.data)[colnames(pam_all.data) == "temp.1"] ="temp"
-```
-
-```{r Subsetting OR selecting}
-all_20C<-subset(resp_all_nitrate.data, resp_all_nitrate.data$temp==20)
-
-#in subsetting the &, aka "and" is an additive function, and |, aka "or" takes anything that has either criteria
-
-#selecting data by row (a condition within  a column)
-env_chamber_HOBO_exp_2<- env_chamber_HOBO[env_chamber_HOBO$date  %in% c("8/4/2022", "8/5/2022", "8/6/2022", "8/7/2022"),] #the comma is important at the end here, tells R that we are looking at ROWs not entire columns
-
-```
-
-```{r TIDYVERSE -- mutate, filter, summarize}
-
-# Change classid to be a factor
-school_3_data <-
-    school_3_data %>%
-    mutate(classid = factor(classid)) #in base R you would use as.factor() but here you use mutate
-
-#filter (similar to subset)
-school_only_entry <- menhaden_all %>% filter(is.na(Number.of.Pounds)==TRUE , Number.of.Schools>=0)
-
-```
-
-
-
-# STATISTICAL TESTS AND MODELING
 
 ```{r T tests parametric and nonparametric}
 #When your data follows a normal distribution
@@ -907,7 +1143,5 @@ ggmap(narra_sat) +
 
 ```
 
-```{r writing CSV}
-write.csv(df,file='/Users/admin/new_file.csv', row.names=TRUE)
-```
+
 
