@@ -925,6 +925,7 @@ gg_N_species_dose_nitrate<-ggplot(data = sum_N_species_dose_nitrate, #the data i
     geom_point() + #you want points
     geom_errorbar(aes(ymin=resp_rate-se, ymax=resp_rate+se), width=0.1, size = 1) + #you want errorbars, calling from the summarySE function from Rmisc
     ggtitle ("Nitrate - N Species Dose summary") + #title for the plot
+  theme(plot.title = element_text(size=12)) + #size of title
    # theme(legend.position = "right", #if you want a legend, this is how you customize it
    #        legend.title = element_text(size=12),
    #        axis.title = element_text(size = 12),
@@ -934,6 +935,7 @@ gg_N_species_dose_nitrate<-ggplot(data = sum_N_species_dose_nitrate, #the data i
    #        axis.text = element_text(size = 12)) +
    geom_jitter(width=0.15, alpha=0.9) + #adds jitters, aka overlays raw data points and spreads them apart from each other
    theme(legend.position="none")+ #this turns off the legend
+   labs(color='S initial population size') + #this changes the title of the legend
     labs(x = "\n", 
          y = expression(paste("Rate O2 Consumption (umol*min"^"-1"~"*g"^"-1"~")")), #x and y labels
          caption = "data represent mean +/- SEM" ) + #gives you a caption at the bottom right
@@ -1070,6 +1072,21 @@ geom_smooth(method="lm", se=FALSE, aes(group = TREATMENT), linewidth = 0.85, lin
 
   stat_smooth_func(geom="text",method="lm",hjust=0,parse=TRUE) +
   geom_smooth(formula = y ~ x, method="lm",se=FALSE) +
+```
+
+```{r Multiple axes - 2 y axes }
+coeff <- 1
+wq_menhaden_03ra_FLIGHTS_stock %>% ggplot(
+       aes(x = as.factor(year))) +
+           geom_bar(aes(y=Value), stat="identity", fill="#757575",alpha=0.8) +
+        geom_bar(aes(y=Number.of.Schools), stat="identity", fill="#1E88E5", alpha=0.8) +
+         scale_y_continuous(name="Number of Schools observed", sec.axis=sec_axis(~.*coeff, name="Recruitment of Age 0 fishin billions"))+ #coeff is an option to scale the other axis
+    ggtitle ("Number of Schools and Recruitment of Age 0 fish (in billions)") +
+  labs(x = "Year") +
+  theme(
+    axis.title.y = element_text(color = "#1E88E5", size=13, face="bold"),
+    axis.title.y.right = element_text(color = "#757575", size=13, face="bold")
+  ) 
 ```
 
 
