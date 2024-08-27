@@ -79,7 +79,7 @@ data <- data.frame(seq=(seq(from=1, to=50, by=3)),num=seq*10)
 
 #Rename seq to sequence
 data %>% #use the pipe operator to add lines of code on the same dataset together
-  rename(sequence=seq) #new name goes first
+  rename(sequence=seq)
 data #now we have changed "seq" to "sequence"
 
 #Mutate to make a new column depending on a condition
